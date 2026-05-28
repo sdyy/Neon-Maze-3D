@@ -283,7 +283,8 @@ export class MazeRenderer {
     this.playerMesh = new THREE.Mesh(playerGeo, playerMat);
     this.playerGroup.add(this.playerMesh);
 
-    this.playerLight = new THREE.PointLight(0x00ffcc, 1.8, 6, 1.2);
+    // Stronger light for better flashlight effect in opaque corridors
+    this.playerLight = new THREE.PointLight(0x00ffcc, 3.5, 12, 1.2);
     this.playerLight.layers.enable(1);
     this.playerLight.layers.enable(2);
     this.playerGroup.add(this.playerLight);
@@ -605,16 +606,17 @@ export class MazeRenderer {
     }
 
     // 1. Render Full Walls for FPV camera (Layer 2)
-    // Uses MeshStandardMaterial with high metallic reflections and player PointLight support for depth shading
+    // OPAQUE walls to block occlusion, creating solid corridors and preventing a transparent "sheet of blue"
     this.updateMeshObject('fpvWallMesh', fpvPositions, fpvNormals, fpvIndices, 
       new THREE.MeshStandardMaterial({
         color: 0x091c4a,
-        emissive: 0x030f30, // Deep base self-illumination
-        roughness: 0.3,
-        metalness: 0.8,
+        emissive: 0x020a24, // Deep base self-illumination
+        roughness: 0.4,
+        metalness: 0.7,
         side: THREE.DoubleSide,
-        transparent: true,
-        opacity: 0.65
+        polygonOffset: true, // Prevents z-fighting with the wall grid border lines
+        polygonOffsetFactor: 1,
+        polygonOffsetUnits: 1
       }),
       2
     );
@@ -978,10 +980,12 @@ export class MazeRenderer {
       // --- Viewport 2: Orbit Overview View (Auxiliary PiP minimap) ---
       this.scene.fog = null; // Temporarily disable scene fog so 3D minimap renders crystal clear!
 
-      const pipWidth = 240;
-      const pipHeight = 180;
-      const pipX = width - pipWidth - 20;
-      const pipY = 20;
+      // Adjust viewport and scissor box using Device Pixel Ratio (DPR) to prevent blurriness
+      const dpr = this.renderer.getPixelRatio();
+      const pipWidth = 240 * dpr;
+      const pipHeight = 180 * dpr;
+      const pipX = (width - 240 - 20) * dpr;
+      const pipY = 20 * dpr;
 
       this.renderer.setViewport(pipX, pipY, pipWidth, pipHeight);
       this.renderer.setScissor(pipX, pipY, pipWidth, pipHeight);
