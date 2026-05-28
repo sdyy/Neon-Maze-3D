@@ -20,6 +20,9 @@ export class MazeRenderer {
     this.wallBorderMesh = null;  // Active slice wall borders (neon)
     this.ghostMesh = null;       // Inactive walls (ghost/transparent solid)
     this.ghostBorderMesh = null; // Inactive wall borders (ghost neon)
+    this.fpvWallMesh = null;       // Full maze walls for FPV
+    this.fpvWallBorderMesh = null; // Full maze wall borders for FPV
+    this.fogExp = null;            // Cache for scene fog density
     
     this.playerGroup = null;     // Group containing player mesh, light, and local keys compass
     this.playerMesh = null;
@@ -62,7 +65,10 @@ export class MazeRenderer {
     // 1. Create Scene
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x050508);
-    this.scene.fog = new THREE.FogExp2(0x050508, 0.015);
+
+    // Cache scene fog for selective rendering
+    this.fogExp = new THREE.FogExp2(0x050508, 0.015);
+    this.scene.fog = this.fogExp;
 
     // 2. Create Cameras
     const width = this.container.clientWidth;
@@ -71,11 +77,13 @@ export class MazeRenderer {
     // Overview/Orbit Camera
     this.camera = new THREE.PerspectiveCamera(60, width / height, 0.1, 1000);
     this.camera.position.set(15, 20, 25);
-    this.camera.layers.enable(1); // Enable Layer 1 (guides and labels) in Orbit view
+    this.camera.layers.enable(0); // Renders Layer 0 (Common items)
+    this.camera.layers.enable(1); // Renders Layer 1 (Sliced walls & key guides)
 
     // First Person Camera (FPV)
     this.fpCamera = new THREE.PerspectiveCamera(70, width / height, 0.05, 50);
-    this.fpCamera.layers.set(0); // FPV camera only renders Layer 0 (default)
+    this.fpCamera.layers.enable(0); // Renders Layer 0 (Common items)
+    this.fpCamera.layers.enable(2); // Renders Layer 2 (Full unsliced walls)
     const euler = new THREE.Euler(this.fpPitch, this.fpYaw, 0, 'YXZ');
     this.fpCamera.quaternion.setFromEuler(euler);
 
@@ -222,6 +230,8 @@ export class MazeRenderer {
     removeAndDispose(this.wallBorderMesh);
     removeAndDispose(this.ghostMesh);
     removeAndDispose(this.ghostBorderMesh);
+    removeAndDispose(this.fpvWallMesh);
+    removeAndDispose(this.fpvWallBorderMesh);
     removeAndDispose(this.startMesh);
     removeAndDispose(this.exitMesh);
     removeAndDispose(this.activePathLine);
@@ -246,6 +256,8 @@ export class MazeRenderer {
     this.wallBorderMesh = null;
     this.ghostMesh = null;
     this.ghostBorderMesh = null;
+    this.fpvWallMesh = null;
+    this.fpvWallBorderMesh = null;
     this.playerMesh = null;
     this.playerLight = null;
     this.startMesh = null;
@@ -439,13 +451,19 @@ export class MazeRenderer {
   updateMazeGeometries() {
     if (!this.maze) return;
 
-    // Active Slice Geometry Arrays
+    // FPV Geometry Arrays (Full unsliced maze walls for FPV camera)
+    const fpvPositions = [];
+    const fpvNormals = [];
+    const fpvIndices = [];
+    const fpvLinePositions = [];
+
+    // Active Slice Geometry Arrays (Sliced walls for Minimap camera)
     const activePositions = [];
     const activeNormals = [];
     const activeIndices = [];
     const activeLinePositions = [];
 
-    // Ghost Geometry Arrays
+    // Ghost Geometry Arrays (Sliced ghost walls for Minimap camera)
     const ghostPositions = [];
     const ghostNormals = [];
     const ghostIndices = [];
@@ -489,7 +507,7 @@ export class MazeRenderer {
           const cell = this.maze.grid[x][y][z];
           const isCellActive = checkSlice(x, y, z);
 
-          // Get target arrays
+          // Get target arrays for sliced minimap
           const pos = isCellActive ? activePositions : ghostPositions;
           const norm = isCellActive ? activeNormals : ghostNormals;
           const idx = isCellActive ? activeIndices : ghostIndices;
@@ -502,79 +520,117 @@ export class MazeRenderer {
 
           // +X Wall
           if (cell.walls.px) {
-            pushQuad(pos, norm, idx, line,
+            const quad = [
               [sx + 0.5, sy - 0.5, sz - 0.5],
               [sx + 0.5, sy + 0.5, sz - 0.5],
               [sx + 0.5, sy + 0.5, sz + 0.5],
               [sx + 0.5, sy - 0.5, sz + 0.5],
               [1, 0, 0]
-            );
+            ];
+            pushQuad(fpvPositions, fpvNormals, fpvIndices, fpvLinePositions, ...quad);
+            pushQuad(pos, norm, idx, line, ...quad);
           }
-          // -X Wall (Only draw on boundary x=0 to prevent double drawing)
+          // -X Wall
           if (x === 0 && cell.walls.nx) {
-            pushQuad(pos, norm, idx, line,
+            const quad = [
               [sx - 0.5, sy - 0.5, sz - 0.5],
               [sx - 0.5, sy - 0.5, sz + 0.5],
               [sx - 0.5, sy + 0.5, sz + 0.5],
               [sx - 0.5, sy + 0.5, sz - 0.5],
               [-1, 0, 0]
-            );
+            ];
+            pushQuad(fpvPositions, fpvNormals, fpvIndices, fpvLinePositions, ...quad);
+            pushQuad(pos, norm, idx, line, ...quad);
           }
 
           // +Y Wall
           if (cell.walls.py) {
-            pushQuad(pos, norm, idx, line,
+            const quad = [
               [sx - 0.5, sy + 0.5, sz - 0.5],
               [sx - 0.5, sy + 0.5, sz + 0.5],
               [sx + 0.5, sy + 0.5, sz + 0.5],
               [sx + 0.5, sy + 0.5, sz - 0.5],
               [0, 1, 0]
-            );
+            ];
+            pushQuad(fpvPositions, fpvNormals, fpvIndices, fpvLinePositions, ...quad);
+            pushQuad(pos, norm, idx, line, ...quad);
           }
-          // -Y Wall (Only draw on boundary y=0)
+          // -Y Wall
           if (y === 0 && cell.walls.ny) {
-            pushQuad(pos, norm, idx, line,
+            const quad = [
               [sx - 0.5, sy - 0.5, sz - 0.5],
               [sx + 0.5, sy - 0.5, sz - 0.5],
               [sx + 0.5, sy - 0.5, sz + 0.5],
               [sx - 0.5, sy - 0.5, sz + 0.5],
               [0, -1, 0]
-            );
+            ];
+            pushQuad(fpvPositions, fpvNormals, fpvIndices, fpvLinePositions, ...quad);
+            pushQuad(pos, norm, idx, line, ...quad);
           }
 
           // +Z Wall
           if (cell.walls.pz) {
-            pushQuad(pos, norm, idx, line,
+            const quad = [
               [sx - 0.5, sy - 0.5, sz + 0.5],
               [sx + 0.5, sy - 0.5, sz + 0.5],
               [sx + 0.5, sy + 0.5, sz + 0.5],
               [sx - 0.5, sy + 0.5, sz + 0.5],
               [0, 0, 1]
-            );
+            ];
+            pushQuad(fpvPositions, fpvNormals, fpvIndices, fpvLinePositions, ...quad);
+            pushQuad(pos, norm, idx, line, ...quad);
           }
-          // -Z Wall (Only draw on boundary z=0)
+          // -Z Wall
           if (z === 0 && cell.walls.nz) {
-            pushQuad(pos, norm, idx, line,
+            const quad = [
               [sx - 0.5, sy - 0.5, sz - 0.5],
               [sx - 0.5, sy + 0.5, sz - 0.5],
               [sx + 0.5, sy + 0.5, sz - 0.5],
               [sx + 0.5, sy - 0.5, sz - 0.5],
               [0, 0, -1]
-            );
+            ];
+            pushQuad(fpvPositions, fpvNormals, fpvIndices, fpvLinePositions, ...quad);
+            pushQuad(pos, norm, idx, line, ...quad);
           }
         }
       }
     }
 
-    // Update active meshes in scene (use bright self-luminous MeshBasicMaterial)
+    // 1. Render Full Walls for FPV camera (Layer 2)
+    // Uses MeshStandardMaterial with high metallic reflections and player PointLight support for depth shading
+    this.updateMeshObject('fpvWallMesh', fpvPositions, fpvNormals, fpvIndices, 
+      new THREE.MeshStandardMaterial({
+        color: 0x091c4a,
+        emissive: 0x030f30, // Deep base self-illumination
+        roughness: 0.3,
+        metalness: 0.8,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0.65
+      }),
+      2
+    );
+
+    this.updateLineObject('fpvWallBorderMesh', fpvLinePositions, 
+      new THREE.LineBasicMaterial({
+        color: 0x00ffff,
+        transparent: true,
+        opacity: 0.85
+      }),
+      2
+    );
+
+    // 2. Render Sliced Walls for Minimap camera (Layer 1)
+    // Uses self-luminous MeshBasicMaterial to stay crystal clear regardless of lighting
     this.updateMeshObject('wallMesh', activePositions, activeNormals, activeIndices, 
       new THREE.MeshBasicMaterial({
-        color: 0x0055cc,
+        color: 0x0088ff,
         transparent: true,
-        opacity: 0.45,
+        opacity: 0.6,
         side: THREE.DoubleSide,
         depthWrite: true
-      })
+      }),
+      1
     );
 
     this.updateLineObject('wallBorderMesh', activeLinePositions, 
@@ -582,32 +638,34 @@ export class MazeRenderer {
         color: 0x00ffff,
         transparent: true,
         opacity: 1.0
-      })
+      }),
+      1
     );
 
-    // Update ghost meshes in scene
+    // 3. Render Ghost background walls for Minimap (Layer 1)
     this.updateMeshObject('ghostMesh', ghostPositions, ghostNormals, ghostIndices, 
       new THREE.MeshBasicMaterial({
-        color: 0x0a1535,
+        color: 0x081530,
         transparent: true,
         opacity: this.xRayOpacity,
         side: THREE.DoubleSide,
         depthWrite: false
-      })
+      }),
+      1
     );
 
     this.updateLineObject('ghostBorderMesh', ghostLinePositions, 
       new THREE.LineBasicMaterial({
-        color: 0x224488,
+        color: 0x00ffff,
         transparent: true,
-        opacity: this.xRayOpacity * 2.5,
+        opacity: this.xRayOpacity * 0.8,
         depthWrite: false
-      })
+      }),
+      1
     );
   }
 
-  updateMeshObject(propName, pos, norm, idx, material) {
-    // Clean old mesh
+  updateMeshObject(propName, pos, norm, idx, material, layer = 0) {
     if (this[propName]) {
       this.scene.remove(this[propName]);
       this[propName].geometry.dispose();
@@ -622,11 +680,11 @@ export class MazeRenderer {
     geo.setIndex(idx);
 
     this[propName] = new THREE.Mesh(geo, material);
+    this[propName].layers.set(layer);
     this.scene.add(this[propName]);
   }
 
-  updateLineObject(propName, pos, material) {
-    // Clean old line
+  updateLineObject(propName, pos, material, layer = 0) {
     if (this[propName]) {
       this.scene.remove(this[propName]);
       this[propName].geometry.dispose();
@@ -639,6 +697,7 @@ export class MazeRenderer {
     geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
 
     this[propName] = new THREE.LineSegments(geo, material);
+    this[propName].layers.set(layer);
     this.scene.add(this[propName]);
   }
 
@@ -896,6 +955,8 @@ export class MazeRenderer {
       this.renderer.setSize(width, height, false);
 
       // --- Viewport 1: First Person View (Main screen) ---
+      this.scene.fog = this.fogExp; // Enable depth fog for First-Person immersion
+      
       this.renderer.setViewport(0, 0, width, height);
       this.renderer.setScissor(0, 0, width, height);
       this.renderer.setScissorTest(false);
@@ -907,6 +968,8 @@ export class MazeRenderer {
       this.renderer.render(this.scene, this.fpCamera);
 
       // --- Viewport 2: Orbit Overview View (Auxiliary PiP minimap) ---
+      this.scene.fog = null; // Temporarily disable scene fog so 3D minimap renders crystal clear!
+
       const pipWidth = 240;
       const pipHeight = 180;
       const pipX = width - pipWidth - 20;
