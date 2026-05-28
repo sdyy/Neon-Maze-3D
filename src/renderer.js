@@ -33,9 +33,9 @@ export class MazeRenderer {
 
     // FPV Camera and state variables
     this.fpCamera = null;
-    this.fpYaw = -Math.PI / 4;
+    this.fpYaw = 0;
     this.fpPitch = 0;
-    this.targetFpYaw = -Math.PI / 4;
+    this.targetFpYaw = 0;
     this.targetFpPitch = 0;
     this.isDraggingFPV = false;
     this.lastMouseX = 0;
@@ -189,9 +189,9 @@ export class MazeRenderer {
     this.playerAnimatedPos.set(this.ox, this.oy, this.oz);
 
     // Reset FPV rotation facing
-    this.fpYaw = -Math.PI / 4;
+    this.fpYaw = 0;
     this.fpPitch = 0;
-    this.targetFpYaw = -Math.PI / 4;
+    this.targetFpYaw = 0;
     this.targetFpPitch = 0;
     const euler = new THREE.Euler(this.fpPitch, this.fpYaw, 0, 'YXZ');
     if (this.fpCamera) {
@@ -912,6 +912,13 @@ export class MazeRenderer {
     const angleStep = Math.PI / 2;
     const nearest = Math.round(this.targetFpYaw / angleStep) * angleStep;
     this.targetFpYaw = nearest - angleStep;
+  }
+
+  alignViewToGrid() {
+    // Snap FPV camera rotation perfectly back to grid axis and look horizontal
+    const angleStep = Math.PI / 2;
+    this.targetFpYaw = Math.round(this.targetFpYaw / angleStep) * angleStep;
+    this.targetFpPitch = 0;
   }
 
   animate() {

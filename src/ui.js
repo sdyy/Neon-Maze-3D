@@ -183,6 +183,9 @@ export class GameUI {
         return; // Ignore other keys
     }
 
+    // Auto-align FPV camera to the grid corridor when moving
+    this.game.renderer.alignViewToGrid();
+
     this.lastMoveTime = now;
     this.game.movePlayer(dx, dy, dz);
   }
