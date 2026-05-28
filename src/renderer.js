@@ -28,6 +28,15 @@ export class MazeRenderer {
     this.exitMesh = null;
     this.exitLight = null;
 
+    // FPV Camera and state variables
+    this.fpCamera = null;
+    this.fpYaw = -Math.PI / 4;
+    this.fpPitch = 0;
+    this.isDraggingFPV = false;
+    this.lastMouseX = 0;
+    this.lastMouseY = 0;
+    this.playerAnimatedPos = new THREE.Vector3(); // Smoothly interpolated position
+
     this.activePathLine = null;  // Current path line (magenta)
     this.hintPathLine = null;    // A* hint line (green dashed)
     this.exploredPoints = null;   // Particle system for explored cells (stardust)
@@ -55,24 +64,33 @@ export class MazeRenderer {
     this.scene.background = new THREE.Color(0x050508);
     this.scene.fog = new THREE.FogExp2(0x050508, 0.015);
 
-    // 2. Create Camera
+    // 2. Create Cameras
     const width = this.container.clientWidth;
     const height = this.container.clientHeight;
+    
+    // Overview/Orbit Camera
     this.camera = new THREE.PerspectiveCamera(60, width / height, 0.1, 1000);
     this.camera.position.set(15, 20, 25);
 
-    // 3. Create Renderer
+    // First Person Camera (FPV)
+    this.fpCamera = new THREE.PerspectiveCamera(70, width / height, 0.05, 50);
+    const euler = new THREE.Euler(this.fpPitch, this.fpYaw, 0, 'YXZ');
+    this.fpCamera.quaternion.setFromEuler(euler);
+
+    // 3. Create WebGL Renderer
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setSize(width, height);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.shadowMap.enabled = true;
+    this.renderer.autoClear = false; // Render twice for dual viewport split screen
     this.container.appendChild(this.renderer.domElement);
 
-    // 4. Create Orbit Controls
-    this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+    // 4. Create Orbit Controls (Bound ONLY to pip-overlay overlay div)
+    const pipOverlay = document.getElementById('pip-overlay');
+    this.controls = new OrbitControls(this.camera, pipOverlay || this.renderer.domElement);
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.05;
-    this.controls.maxPolarAngle = Math.PI; // Full rotation
+    this.controls.maxPolarAngle = Math.PI;
     this.controls.minDistance = 2;
     this.controls.maxDistance = 150;
 
@@ -84,15 +102,58 @@ export class MazeRenderer {
     dirLight.position.set(10, 20, 15);
     this.scene.add(dirLight);
 
-    // 6. Window Resize Listener
+    // 6. Setup Drag Listeners on canvas for FPV camera rotation
+    const onMouseDown = (e) => {
+      // Only drag FPV look when clicking main canvas (not UI overlay panel)
+      if (e.target !== this.renderer.domElement) return;
+      this.isDraggingFPV = true;
+      this.lastMouseX = e.clientX;
+      this.lastMouseY = e.clientY;
+      this.container.style.cursor = 'grabbing';
+    };
+
+    const onMouseMove = (e) => {
+      if (!this.isDraggingFPV) return;
+      const dx = e.clientX - this.lastMouseX;
+      const dy = e.clientY - this.lastMouseY;
+      
+      this.fpYaw -= dx * 0.0025;
+      this.fpPitch -= dy * 0.0025;
+      
+      // Clamp pitch to prevent flipping upside down
+      const limit = Math.PI / 2.15;
+      this.fpPitch = Math.max(-limit, Math.min(limit, this.fpPitch));
+      
+      const euler = new THREE.Euler(this.fpPitch, this.fpYaw, 0, 'YXZ');
+      this.fpCamera.quaternion.setFromEuler(euler);
+      
+      this.lastMouseX = e.clientX;
+      this.lastMouseY = e.clientY;
+    };
+
+    const onMouseUp = () => {
+      this.isDraggingFPV = false;
+      this.container.style.cursor = 'default';
+    };
+
+    this.container.addEventListener('mousedown', onMouseDown);
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+
+    // 7. Window Resize Listener
     window.addEventListener('resize', this.onWindowResize.bind(this));
   }
 
   onWindowResize() {
     const width = this.container.clientWidth;
     const height = this.container.clientHeight;
+    
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
+    
+    this.fpCamera.aspect = width / height;
+    this.fpCamera.updateProjectionMatrix();
+    
     this.renderer.setSize(width, height);
   }
 
@@ -107,6 +168,17 @@ export class MazeRenderer {
     this.playerPos = { x: 0, y: 0, z: 0 };
     this.exploredCells.clear();
     this.exploredCells.add('0,0,0');
+
+    // Snap animated position immediately on new maze
+    this.playerAnimatedPos.set(this.ox, this.oy, this.oz);
+
+    // Reset FPV rotation facing
+    this.fpYaw = -Math.PI / 4;
+    this.fpPitch = 0;
+    const euler = new THREE.Euler(this.fpPitch, this.fpYaw, 0, 'YXZ');
+    if (this.fpCamera) {
+      this.fpCamera.quaternion.setFromEuler(euler);
+    }
 
     // Reset slice settings
     if (this.sliceMode !== 'none' && this.autoSlice) {
@@ -264,6 +336,8 @@ export class MazeRenderer {
   }
 
   updatePlayerMeshPosition() {
+    // Deprecated since positions are updated smoothly in animate(), 
+    // but kept for compatibility.
     const px = this.playerPos.x + this.ox;
     const py = this.playerPos.y + this.oy;
     const pz = this.playerPos.z + this.oz;
@@ -277,7 +351,13 @@ export class MazeRenderer {
     this.playerPos = { x, y, z };
     this.exploredCells.add(`${x},${y},${z}`);
 
-    this.updatePlayerMeshPosition();
+    // If starting a new game or resetting, snap animated position immediately
+    if (x === 0 && y === 0 && z === 0) {
+      this.playerAnimatedPos.set(this.ox, this.oy, this.oz);
+      if (this.playerGroup) {
+        this.playerGroup.position.copy(this.playerAnimatedPos);
+      }
+    }
 
     // Auto slice tracking
     if (this.autoSlice && this.sliceMode !== 'none') {
@@ -708,21 +788,84 @@ export class MazeRenderer {
     return sprite;
   }
 
+  // Get camera-relative grid direction vectors for FPV keyboard controls
+  getMovementDirections() {
+    if (!this.fpCamera) {
+      return {
+        forward: { dx: 0, dy: 0, dz: -1 },
+        backward: { dx: 0, dy: 0, dz: 1 },
+        left: { dx: -1, dy: 0, dz: 0 },
+        right: { dx: 1, dy: 0, dz: 0 }
+      };
+    }
+
+    const dir = new THREE.Vector3();
+    this.fpCamera.getWorldDirection(dir);
+    
+    // Horizontal forward vector (ignore Y components)
+    const forward = new THREE.Vector3(dir.x, 0, dir.z).normalize();
+    
+    // Determine closest horizontal axis
+    let fdx = 0;
+    let fdz = 0;
+    
+    if (Math.abs(forward.x) > Math.abs(forward.z)) {
+      fdx = Math.sign(forward.x);
+    } else {
+      fdz = Math.sign(forward.z);
+    }
+    
+    // Right side vector (rotated 90 degrees clockwise around Y-axis)
+    const rdx = -fdz;
+    const rdz = fdx;
+    
+    return {
+      forward: { dx: fdx, dy: 0, dz: fdz },
+      backward: { dx: -fdx, dy: 0, dz: -fdz },
+      right: { dx: rdx, dy: 0, dz: rdz },
+      left: { dx: -rdx, dy: 0, dz: -rdz }
+    };
+  }
+
   animate() {
     requestAnimationFrame(this.animate.bind(this));
 
-    // Update orbit controls
-    if (this.controls) this.controls.update();
+    const time = Date.now() * 0.003;
 
-    // Rotate player octahedron body for dynamic visual effect
+    // 1. Smoothly interpolate player position for first-person and minimap view tracking
+    if (this.maze && this.playerAnimatedPos) {
+      const tx = this.playerPos.x + this.ox;
+      const ty = this.playerPos.y + this.oy;
+      const tz = this.playerPos.z + this.oz;
+      
+      this.playerAnimatedPos.x += (tx - this.playerAnimatedPos.x) * 0.16;
+      this.playerAnimatedPos.y += (ty - this.playerAnimatedPos.y) * 0.16;
+      this.playerAnimatedPos.z += (tz - this.playerAnimatedPos.z) * 0.16;
+      
+      if (this.playerGroup) {
+        this.playerGroup.position.copy(this.playerAnimatedPos);
+      }
+      
+      if (this.fpCamera) {
+        this.fpCamera.position.copy(this.playerAnimatedPos);
+      }
+      
+      // Update Orbit overview target to center on player
+      if (this.controls) {
+        this.controls.target.copy(this.playerAnimatedPos);
+      }
+    }
+
+    // 2. Rotate player octahedron body for dynamic visual effect
     if (this.playerMesh) {
       this.playerMesh.rotation.x += 0.01;
       this.playerMesh.rotation.y += 0.015;
     }
 
+    // Update orbit controls
+    if (this.controls) this.controls.update();
+
     // Pulse effects for exits, point lights
-    const time = Date.now() * 0.003;
-    
     if (this.exitMesh) {
       const scale = 1 + Math.sin(time) * 0.08;
       this.exitMesh.scale.set(scale, scale, scale);
@@ -734,8 +877,39 @@ export class MazeRenderer {
       this.playerLight.intensity = 1.8 + Math.cos(time * 2) * 0.25;
     }
 
-    // Render scene
-    if (this.renderer && this.scene && this.camera) {
+    // 3. Render dual views (Main FPV + Picture-in-Picture Minimap)
+    if (this.renderer && this.scene) {
+      const width = this.container.clientWidth;
+      const height = this.container.clientHeight;
+
+      this.renderer.setSize(width, height, false);
+
+      // --- Viewport 1: First Person View (Main screen) ---
+      this.renderer.setViewport(0, 0, width, height);
+      this.renderer.setScissor(0, 0, width, height);
+      this.renderer.setScissorTest(false);
+      this.renderer.clear(); // Clear whole canvas color & depth
+
+      // Hide player model body during FPV render so camera isn't inside it
+      if (this.playerMesh) this.playerMesh.visible = false;
+
+      this.renderer.render(this.scene, this.fpCamera);
+
+      // --- Viewport 2: Orbit Overview View (Auxiliary PiP minimap) ---
+      const pipWidth = 240;
+      const pipHeight = 180;
+      const pipX = width - pipWidth - 20;
+      const pipY = 20;
+
+      this.renderer.setViewport(pipX, pipY, pipWidth, pipHeight);
+      this.renderer.setScissor(pipX, pipY, pipWidth, pipHeight);
+      this.renderer.setScissorTest(true);
+      
+      this.renderer.clearDepth(); // Clear depth buffer so PiP draws correctly
+
+      // Show player body in Orbit Overview PiP render
+      if (this.playerMesh) this.playerMesh.visible = true;
+
       this.renderer.render(this.scene, this.camera);
     }
   }

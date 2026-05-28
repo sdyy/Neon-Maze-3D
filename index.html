@@ -116,20 +116,25 @@
       <div class="controls-guide">
         <div class="section-title" style="color: var(--neon-violet); font-size: 0.65rem; margin-bottom: 2px;">控制說明</div>
         <ul>
-          <li><span class="key">W</span><span class="key">S</span><span class="key">A</span><span class="key">D</span> / <span class="key">↑</span><span class="key">↓</span><span class="key">←</span><span class="key">→</span> : 水平移動</li>
+          <li><span class="key">W</span><span class="key">S</span><span class="key">A</span><span class="key">D</span> / <span class="key">↑</span><span class="key">↓</span><span class="key">←</span><span class="key">→</span> : 視角前/後/左/右移動</li>
           <li><span class="key">Space</span> / <span class="key">Q</span> : 向上爬升 (+Y)</li>
           <li><span class="key">Shift</span> / <span class="key">E</span> : 向下潛沉 (-Y)</li>
-          <li><span class="key">滑鼠拖曳</span> : 旋轉 3D 視角</li>
-          <li><span class="key">滾輪縮放</span> : 放大/縮小迷宮</li>
+          <li><span class="key">主畫面拖曳</span> : 轉動第一人稱視角 (FPV)</li>
+          <li><span class="key">小地圖拖曳/滾輪</span> : 旋轉/縮放 3D 輔助矩陣</li>
         </ul>
       </div>
     </div>
 
-    <!-- Compass Overlay -->
+    <!-- Floating Overview PiP Container Overlay -->
+    <div id="pip-overlay">
+      <div class="pip-label">3D 全息輔助矩陣</div>
+    </div>
+
+    <!-- Compass Overlay (Moved above PiP) -->
     <div id="compass-hud">
-      <div class="compass-row"><span class="axis-indicator x"></span> <span>X 軸 (左右)</span></div>
-      <div class="compass-row"><span class="axis-indicator y"></span> <span>Y 軸 (上下)</span></div>
-      <div class="compass-row"><span class="axis-indicator z"></span> <span>Z 軸 (前後)</span></div>
+      <div class="compass-row"><span class="axis-indicator x"></span> <span>X 軸 (A/D)</span></div>
+      <div class="compass-row"><span class="axis-indicator y"></span> <span>Y 軸 (Space/Shift)</span></div>
+      <div class="compass-row"><span class="axis-indicator z"></span> <span>Z 軸 (W/S)</span></div>
     </div>
 
     <!-- Victory Overlay Screen -->

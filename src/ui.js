@@ -125,7 +125,6 @@ export class GameUI {
     const explored = this.cbShowExplored.checked;
     this.game.renderer.updateShowPaths(hint, explored);
   }
-
   handleKeyDown(e) {
     if (this.game.isGameOver) return;
 
@@ -142,23 +141,34 @@ export class GameUI {
     let dy = 0;
     let dz = 0;
 
+    // Get camera-relative directions from renderer
+    const relativeDirs = this.game.renderer.getMovementDirections();
+
     switch (e.key.toLowerCase()) {
-      // Horizontal (X, Z)
-      case 'arrowleft':
-      case 'a':
-        dx = -1; // West
-        break;
-      case 'arrowright':
-      case 'd':
-        dx = 1; // East
-        break;
+      // Horizontal movement relative to FPV camera facing direction
       case 'arrowup':
       case 'w':
-        dz = -1; // North
+        dx = relativeDirs.forward.dx;
+        dy = relativeDirs.forward.dy;
+        dz = relativeDirs.forward.dz;
         break;
       case 'arrowdown':
       case 's':
-        dz = 1; // South
+        dx = relativeDirs.backward.dx;
+        dy = relativeDirs.backward.dy;
+        dz = relativeDirs.backward.dz;
+        break;
+      case 'arrowleft':
+      case 'a':
+        dx = relativeDirs.left.dx;
+        dy = relativeDirs.left.dy;
+        dz = relativeDirs.left.dz;
+        break;
+      case 'arrowright':
+      case 'd':
+        dx = relativeDirs.right.dx;
+        dy = relativeDirs.right.dy;
+        dz = relativeDirs.right.dz;
         break;
 
       // Vertical (Y)
@@ -180,6 +190,7 @@ export class GameUI {
     this.lastMoveTime = now;
     this.game.movePlayer(dx, dy, dz);
   }
+
 
   // Update visual controls after a player move or slice jump
   updateSliceDisplay(val) {
