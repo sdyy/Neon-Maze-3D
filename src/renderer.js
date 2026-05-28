@@ -106,10 +106,14 @@ export class MazeRenderer {
 
     // 5. Add Lights
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.15);
+    ambientLight.layers.enable(1);
+    ambientLight.layers.enable(2);
     this.scene.add(ambientLight);
 
     const dirLight = new THREE.DirectionalLight(0xffffff, 0.2);
     dirLight.position.set(10, 20, 15);
+    dirLight.layers.enable(1);
+    dirLight.layers.enable(2);
     this.scene.add(dirLight);
 
     // 6. Setup Drag Listeners on canvas for FPV camera rotation
@@ -280,6 +284,8 @@ export class MazeRenderer {
     this.playerGroup.add(this.playerMesh);
 
     this.playerLight = new THREE.PointLight(0x00ffcc, 1.8, 6, 1.2);
+    this.playerLight.layers.enable(1);
+    this.playerLight.layers.enable(2);
     this.playerGroup.add(this.playerLight);
 
     // 3D Directional Key Crosshair (floating visual helper around player)
@@ -349,6 +355,8 @@ export class MazeRenderer {
     this.scene.add(this.exitMesh);
 
     this.exitLight = new THREE.PointLight(0xffaa00, 2, 8, 1);
+    this.exitLight.layers.enable(1);
+    this.exitLight.layers.enable(2);
     this.exitLight.position.copy(this.exitMesh.position);
     this.scene.add(this.exitLight);
 
