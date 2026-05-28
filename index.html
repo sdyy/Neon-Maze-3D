@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3D Neon Maze - 全息投影 3D 迷宮</title>
+  <meta name="description" content="一個基於 Three.js 的 3D 霓虹迷宮小遊戲，支援切片檢視、透視度調整與 A* 尋路提示。">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div id="app-container">
+    <!-- Three.js Canvas Container -->
+    <div id="canvas-container"></div>
+
+    <!-- Side Panel UI -->
+    <div class="panel">
+      <div class="title-container">
+        <h1>NEON MAZE 3D</h1>
+        <div class="subtitle">3D 全息迷宮遊戲</div>
+      </div>
+
+      <!-- Difficulty -->
+      <div class="section">
+        <div class="section-title">遊戲難度</div>
+        <select id="select-difficulty">
+          <option value="3">3 x 3 x 3 (新手教學)</option>
+          <option value="5">5 x 5 x 5 (簡單體驗)</option>
+          <option value="9" selected>9 x 9 x 9 (一般挑戰)</option>
+          <option value="15">15 x 15 x 15 (高手難度)</option>
+          <option value="27">27 x 27 x 27 (終極傳奇)</option>
+        </select>
+      </div>
+
+      <!-- Slice Visualization -->
+      <div class="section">
+        <div class="section-title">切片檢視 (Slicing)</div>
+        <label for="select-slice">
+          <span>剖面軸向</span>
+        </label>
+        <select id="select-slice">
+          <option value="none">無 (全 3D 顯示)</option>
+          <option value="x">X 軸剖面 (左右)</option>
+          <option value="y" selected>Y 軸剖面 (上下)</option>
+          <option value="z">Z 軸剖面 (前後)</option>
+        </select>
+
+        <label style="margin-top: 6px;">
+          <span class="checkbox-row">
+            <input type="checkbox" id="cb-auto-slice" checked>
+            自動跟隨玩家位置
+          </span>
+        </label>
+
+        <label style="margin-top: 8px;">
+          <span>手動切片位置: <span id="span-slice-val" class="highlight-cyan">-</span></span>
+        </label>
+        <input type="range" id="slider-slice-val" min="0" max="8" value="0" disabled>
+      </div>
+
+      <!-- X-Ray Opacity -->
+      <div class="section">
+        <label>
+          <span>幽靈網格透明度 (X-Ray)</span>
+          <span id="span-xray" style="color: var(--neon-cyan)">5%</span>
+        </label>
+        <input type="range" id="slider-xray" min="0.0" max="0.25" step="0.01" value="0.05">
+      </div>
+
+      <!-- Path Assistance -->
+      <div class="section">
+        <div class="section-title">路徑輔助</div>
+        <label class="checkbox-row">
+          <input type="checkbox" id="cb-show-explored" checked>
+          顯示走過的分支 (紫色星塵)
+        </label>
+        <label class="checkbox-row" style="margin-top: 4px;">
+          <input type="checkbox" id="cb-show-hint">
+          顯示 A* 最短路徑 (綠色虛線)
+        </label>
+      </div>
+
+      <!-- HUD Statistics -->
+      <div class="section">
+        <div class="section-title">即時狀態</div>
+        <div class="hud-grid">
+          <div class="hud-item">
+            <div class="hud-label">目前座標</div>
+            <div class="hud-value highlight-cyan" id="hud-pos">[0, 0, 0]</div>
+          </div>
+          <div class="hud-item">
+            <div class="hud-label">移動步數</div>
+            <div class="hud-value" id="hud-moves">0</div>
+          </div>
+          <div class="hud-item">
+            <div class="hud-label">計時時間</div>
+            <div class="hud-value" id="hud-timer">00:00</div>
+          </div>
+          <div class="hud-item">
+            <div class="hud-label">探索比率</div>
+            <div class="hud-value" id="hud-progress">0%</div>
+          </div>
+          <div class="hud-item hud-item-wide">
+            <div class="hud-label">至出口的最短步數</div>
+            <div class="hud-value highlight-pink" id="hud-distance">-</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="button-row">
+        <button id="btn-reset">重置本局</button>
+        <button id="btn-new" class="primary">全新迷宮</button>
+      </div>
+
+      <!-- Control Guide -->
+      <div class="controls-guide">
+        <div class="section-title" style="color: var(--neon-violet); font-size: 0.65rem; margin-bottom: 2px;">控制說明</div>
+        <ul>
+          <li><span class="key">W</span><span class="key">S</span><span class="key">A</span><span class="key">D</span> / <span class="key">↑</span><span class="key">↓</span><span class="key">←</span><span class="key">→</span> : 水平移動</li>
+          <li><span class="key">Space</span> / <span class="key">Q</span> : 向上爬升 (+Y)</li>
+          <li><span class="key">Shift</span> / <span class="key">E</span> : 向下潛沉 (-Y)</li>
+          <li><span class="key">滑鼠拖曳</span> : 旋轉 3D 視角</li>
+          <li><span class="key">滾輪縮放</span> : 放大/縮小迷宮</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Compass Overlay -->
+    <div id="compass-hud">
+      <div class="compass-row"><span class="axis-indicator x"></span> <span>X 軸 (左右)</span></div>
+      <div class="compass-row"><span class="axis-indicator y"></span> <span>Y 軸 (上下)</span></div>
+      <div class="compass-row"><span class="axis-indicator z"></span> <span>Z 軸 (前後)</span></div>
+    </div>
+
+    <!-- Victory Overlay Screen -->
+    <div id="victory-overlay">
+      <div class="victory-card">
+        <div class="victory-title">迷宮破關！</div>
+        <div id="victory-stats" class="victory-stats">
+          <!-- Populated by JavaScript -->
+        </div>
+        <button id="btn-victory-next" class="primary" style="padding: 12px;">新挑戰</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/main.js"></script>
+</body>
+</html>

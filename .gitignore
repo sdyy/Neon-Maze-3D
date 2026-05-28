@@ -1,0 +1,15 @@
+# Node.js dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Production build output
+dist/
+
+# IDE and local configuration files
+.vscode/
+.idea/
+.DS_Store
+.gemini-ws/
+.gemini/
