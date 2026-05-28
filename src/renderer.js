@@ -71,9 +71,11 @@ export class MazeRenderer {
     // Overview/Orbit Camera
     this.camera = new THREE.PerspectiveCamera(60, width / height, 0.1, 1000);
     this.camera.position.set(15, 20, 25);
+    this.camera.layers.enable(1); // Enable Layer 1 (guides and labels) in Orbit view
 
     // First Person Camera (FPV)
     this.fpCamera = new THREE.PerspectiveCamera(70, width / height, 0.05, 50);
+    this.fpCamera.layers.set(0); // FPV camera only renders Layer 0 (default)
     const euler = new THREE.Euler(this.fpPitch, this.fpYaw, 0, 'YXZ');
     this.fpCamera.quaternion.setFromEuler(euler);
 
@@ -194,10 +196,9 @@ export class MazeRenderer {
     // Generate Maze Wall Geometries
     this.updateMazeGeometries();
 
-    // Reset Camera view depending on maze size
-    const maxDim = Math.max(maze.width, maze.height, maze.depth);
-    this.camera.position.set(maxDim * 1.2, maxDim * 1.5, maxDim * 1.8);
-    this.controls.target.set(0, 0, 0);
+    // Reset Camera view to close-up overview centered on player
+    this.camera.position.copy(this.playerAnimatedPos).add(new THREE.Vector3(4, 5, 6));
+    this.controls.target.copy(this.playerAnimatedPos);
     this.controls.update();
 
     // Redraw paths
@@ -276,37 +277,45 @@ export class MazeRenderer {
 
     const createAxisLine = (points, material) => {
       const geo = new THREE.BufferGeometry().setFromPoints(points);
-      return new THREE.Line(geo, material);
+      const line = new THREE.Line(geo, material);
+      line.layers.set(1); // Set to Layer 1 (only visible in Orbit minimap)
+      return line;
     };
 
-    // Draw coordinate lines extending from the player
+    // Draw coordinate lines extending from the player (only on Layer 1)
     this.playerGroup.add(createAxisLine([new THREE.Vector3(-0.7, 0, 0), new THREE.Vector3(0.7, 0, 0)], axisMaterialX));
     this.playerGroup.add(createAxisLine([new THREE.Vector3(0, -0.7, 0), new THREE.Vector3(0, 0.7, 0)], axisMaterialY));
     this.playerGroup.add(createAxisLine([new THREE.Vector3(0, 0, -0.7), new THREE.Vector3(0, 0, 0.7)], axisMaterialZ));
 
-    // Place camera-facing text sprites indicating which keys map to which local 3D direction
+    // Place camera-facing text sprites indicating which keys map to which local 3D direction (Layer 1)
     this.labelD = this.createLabelSprite('D', '#ff3333');
     this.labelD.position.set(0.85, 0, 0);
+    this.labelD.layers.set(1);
     this.playerGroup.add(this.labelD);
 
     this.labelA = this.createLabelSprite('A', '#ff3333');
     this.labelA.position.set(-0.85, 0, 0);
+    this.labelA.layers.set(1);
     this.playerGroup.add(this.labelA);
 
     this.labelSpace = this.createLabelSprite('Q/Space', '#33ff33');
     this.labelSpace.position.set(0, 0.85, 0);
+    this.labelSpace.layers.set(1);
     this.playerGroup.add(this.labelSpace);
 
     this.labelShift = this.createLabelSprite('E/Shift', '#33ff33');
     this.labelShift.position.set(0, -0.85, 0);
+    this.labelShift.layers.set(1);
     this.playerGroup.add(this.labelShift);
 
     this.labelS = this.createLabelSprite('S', '#3333ff');
     this.labelS.position.set(0, 0, 0.85);
+    this.labelS.layers.set(1);
     this.playerGroup.add(this.labelS);
 
     this.labelW = this.createLabelSprite('W', '#3333ff');
     this.labelW.position.set(0, 0, -0.85);
+    this.labelW.layers.set(1);
     this.playerGroup.add(this.labelW);
 
     // 2. Start (Blue glowing sphere)
@@ -742,19 +751,19 @@ export class MazeRenderer {
     return texture;
   }
 
-  // Create camera-facing floating text labels using Canvas sprite texture
+  // Create camera-facing floating text labels using Canvas sprite texture (High Res & Sharp)
   createLabelSprite(text, color) {
     const canvas = document.createElement('canvas');
-    canvas.width = 96;
-    canvas.height = 32;
+    canvas.width = 256;
+    canvas.height = 64;
     const ctx = canvas.getContext('2d');
 
     // Rounded rectangle background
     ctx.fillStyle = 'rgba(10, 10, 20, 0.85)';
     ctx.strokeStyle = color;
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 4;
 
-    const x = 2, y = 2, w = 92, h = 28, r = 6;
+    const x = 4, y = 4, w = 248, h = 56, r = 12;
     ctx.beginPath();
     ctx.moveTo(x + r, y);
     ctx.lineTo(x + w - r, y);
@@ -769,12 +778,12 @@ export class MazeRenderer {
     ctx.fill();
     ctx.stroke();
 
-    // Draw text centered
+    // Draw text centered (large and crisp!)
     ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 13px Monospace';
+    ctx.font = 'bold 28px Monospace';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(text, 48, 16);
+    ctx.fillText(text, 128, 32);
 
     const texture = new THREE.CanvasTexture(canvas);
     const material = new THREE.SpriteMaterial({ 
@@ -784,7 +793,7 @@ export class MazeRenderer {
       depthWrite: false 
     });
     const sprite = new THREE.Sprite(material);
-    sprite.scale.set(0.9, 0.3, 1);
+    sprite.scale.set(0.6, 0.15, 1);
     return sprite;
   }
 
@@ -850,8 +859,10 @@ export class MazeRenderer {
         this.fpCamera.position.copy(this.playerAnimatedPos);
       }
       
-      // Update Orbit overview target to center on player
+      // Update Orbit overview target to center on player and follow
       if (this.controls) {
+        const delta = new THREE.Vector3().copy(this.playerAnimatedPos).sub(this.controls.target);
+        this.camera.position.add(delta);
         this.controls.target.copy(this.playerAnimatedPos);
       }
     }
