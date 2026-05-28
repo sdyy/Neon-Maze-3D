@@ -160,16 +160,12 @@ export class GameUI {
         break;
       case 'arrowleft':
       case 'a':
-        dx = relativeDirs.left.dx;
-        dy = relativeDirs.left.dy;
-        dz = relativeDirs.left.dz;
-        break;
+        this.game.renderer.turnLeft();
+        return; // Turn only, do not move
       case 'arrowright':
       case 'd':
-        dx = relativeDirs.right.dx;
-        dy = relativeDirs.right.dy;
-        dz = relativeDirs.right.dz;
-        break;
+        this.game.renderer.turnRight();
+        return; // Turn only, do not move
 
       // Vertical (Y)
       case ' ': // Space key

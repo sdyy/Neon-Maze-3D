@@ -35,6 +35,8 @@ export class MazeRenderer {
     this.fpCamera = null;
     this.fpYaw = -Math.PI / 4;
     this.fpPitch = 0;
+    this.targetFpYaw = -Math.PI / 4;
+    this.targetFpPitch = 0;
     this.isDraggingFPV = false;
     this.lastMouseX = 0;
     this.lastMouseY = 0;
@@ -74,14 +76,14 @@ export class MazeRenderer {
     const width = this.container.clientWidth;
     const height = this.container.clientHeight;
     
-    // Overview/Orbit Camera
-    this.camera = new THREE.PerspectiveCamera(60, width / height, 0.1, 1000);
+    // Overview/Orbit Camera (50% screen width)
+    this.camera = new THREE.PerspectiveCamera(60, (width / 2) / height, 0.1, 1000);
     this.camera.position.set(15, 20, 25);
     this.camera.layers.enable(0); // Renders Layer 0 (Common items)
     this.camera.layers.enable(1); // Renders Layer 1 (Sliced walls & key guides)
 
-    // First Person Camera (FPV)
-    this.fpCamera = new THREE.PerspectiveCamera(70, width / height, 0.05, 50);
+    // First Person Camera (FPV) (50% screen width)
+    this.fpCamera = new THREE.PerspectiveCamera(70, (width / 2) / height, 0.05, 50);
     this.fpCamera.layers.enable(0); // Renders Layer 0 (Common items)
     this.fpCamera.layers.enable(2); // Renders Layer 2 (Full unsliced walls)
     const euler = new THREE.Euler(this.fpPitch, this.fpYaw, 0, 'YXZ');
@@ -120,6 +122,8 @@ export class MazeRenderer {
     const onMouseDown = (e) => {
       // Only drag FPV look when clicking main canvas (not UI overlay panel)
       if (e.target !== this.renderer.domElement) return;
+      // Only allow dragging look-around on the Left 50% (FPV Viewport)
+      if (e.clientX >= window.innerWidth / 2) return;
       this.isDraggingFPV = true;
       this.lastMouseX = e.clientX;
       this.lastMouseY = e.clientY;
@@ -131,15 +135,10 @@ export class MazeRenderer {
       const dx = e.clientX - this.lastMouseX;
       const dy = e.clientY - this.lastMouseY;
       
-      this.fpYaw -= dx * 0.0025;
-      this.fpPitch -= dy * 0.0025;
-      
-      // Clamp pitch to prevent flipping upside down
-      const limit = Math.PI / 2.15;
-      this.fpPitch = Math.max(-limit, Math.min(limit, this.fpPitch));
-      
-      const euler = new THREE.Euler(this.fpPitch, this.fpYaw, 0, 'YXZ');
-      this.fpCamera.quaternion.setFromEuler(euler);
+      // Update target yaw/pitch for smooth interpolation
+      this.targetFpYaw -= dx * 0.0025;
+      this.targetFpPitch -= dy * 0.0025;
+      this.targetFpPitch = Math.max(-Math.PI / 3, Math.min(Math.PI / 3, this.targetFpPitch));
       
       this.lastMouseX = e.clientX;
       this.lastMouseY = e.clientY;
@@ -162,10 +161,13 @@ export class MazeRenderer {
     const width = this.container.clientWidth;
     const height = this.container.clientHeight;
     
-    this.camera.aspect = width / height;
+    // Split screen viewports: each camera aspect ratio uses half width
+    const halfWidth = width / 2;
+    
+    this.camera.aspect = halfWidth / height;
     this.camera.updateProjectionMatrix();
     
-    this.fpCamera.aspect = width / height;
+    this.fpCamera.aspect = halfWidth / height;
     this.fpCamera.updateProjectionMatrix();
     
     this.renderer.setSize(width, height);
@@ -189,6 +191,8 @@ export class MazeRenderer {
     // Reset FPV rotation facing
     this.fpYaw = -Math.PI / 4;
     this.fpPitch = 0;
+    this.targetFpYaw = -Math.PI / 4;
+    this.targetFpPitch = 0;
     const euler = new THREE.Euler(this.fpPitch, this.fpYaw, 0, 'YXZ');
     if (this.fpCamera) {
       this.fpCamera.quaternion.setFromEuler(euler);
@@ -868,29 +872,20 @@ export class MazeRenderer {
 
   // Get camera-relative grid direction vectors for FPV keyboard controls
   getMovementDirections() {
-    if (!this.fpCamera) {
-      return {
-        forward: { dx: 0, dy: 0, dz: -1 },
-        backward: { dx: 0, dy: 0, dz: 1 },
-        left: { dx: -1, dy: 0, dz: 0 },
-        right: { dx: 1, dy: 0, dz: 0 }
-      };
-    }
+    if (!this.fpCamera) return null;
 
-    const dir = new THREE.Vector3();
-    this.fpCamera.getWorldDirection(dir);
-    
-    // Horizontal forward vector (ignore Y components)
-    const forward = new THREE.Vector3(dir.x, 0, dir.z).normalize();
+    // Use target FPV yaw for exact discrete grid direction calculations
+    const fx = Math.sin(this.targetFpYaw);
+    const fz = Math.cos(this.targetFpYaw);
     
     // Determine closest horizontal axis
     let fdx = 0;
     let fdz = 0;
     
-    if (Math.abs(forward.x) > Math.abs(forward.z)) {
-      fdx = Math.sign(forward.x);
+    if (Math.abs(fx) > Math.abs(fz)) {
+      fdx = Math.sign(fx);
     } else {
-      fdz = Math.sign(forward.z);
+      fdz = Math.sign(fz);
     }
     
     // Right side vector (rotated 90 degrees clockwise around Y-axis)
@@ -903,6 +898,20 @@ export class MazeRenderer {
       right: { dx: rdx, dy: 0, dz: rdz },
       left: { dx: -rdx, dy: 0, dz: -rdz }
     };
+  }
+
+  turnLeft() {
+    // Snap to nearest 90 deg and turn 90 deg left (+Math.PI / 2)
+    const angleStep = Math.PI / 2;
+    const nearest = Math.round(this.targetFpYaw / angleStep) * angleStep;
+    this.targetFpYaw = nearest + angleStep;
+  }
+
+  turnRight() {
+    // Snap to nearest 90 deg and turn 90 deg right (-Math.PI / 2)
+    const angleStep = Math.PI / 2;
+    const nearest = Math.round(this.targetFpYaw / angleStep) * angleStep;
+    this.targetFpYaw = nearest - angleStep;
   }
 
   animate() {
@@ -942,6 +951,14 @@ export class MazeRenderer {
       this.playerMesh.rotation.y += 0.015;
     }
 
+    // Smoothly interpolate FPV camera rotation
+    this.fpYaw += (this.targetFpYaw - this.fpYaw) * 0.16;
+    this.fpPitch += (this.targetFpPitch - this.fpPitch) * 0.16;
+    if (this.fpCamera) {
+      const euler = new THREE.Euler(this.fpPitch, this.fpYaw, 0, 'YXZ');
+      this.fpCamera.quaternion.setFromEuler(euler);
+    }
+
     // Update orbit controls
     if (this.controls) this.controls.update();
 
@@ -954,46 +971,42 @@ export class MazeRenderer {
       this.exitLight.intensity = 2 + Math.sin(time * 1.5) * 0.5;
     }
     if (this.playerLight) {
-      this.playerLight.intensity = 1.8 + Math.cos(time * 2) * 0.25;
+      this.playerLight.intensity = 3.5 + Math.cos(time * 2) * 0.35;
     }
 
-    // 3. Render dual views (Main FPV + Picture-in-Picture Minimap)
+    // 3. Render dual views (Left 50% FPV + Right 50% Third Person Orbit Overview)
     if (this.renderer && this.scene) {
       const width = this.container.clientWidth;
       const height = this.container.clientHeight;
+      const dpr = this.renderer.getPixelRatio();
 
       this.renderer.setSize(width, height, false);
 
-      // --- Viewport 1: First Person View (Main screen) ---
+      const halfPhysicalWidth = (width / 2) * dpr;
+      const physicalHeight = height * dpr;
+
+      // --- Viewport 1: First Person View (Left Screen) ---
       this.scene.fog = this.fogExp; // Enable depth fog for First-Person immersion
       
-      this.renderer.setViewport(0, 0, width, height);
-      this.renderer.setScissor(0, 0, width, height);
-      this.renderer.setScissorTest(false);
-      this.renderer.clear(); // Clear whole canvas color & depth
+      this.renderer.setViewport(0, 0, halfPhysicalWidth, physicalHeight);
+      this.renderer.setScissor(0, 0, halfPhysicalWidth, physicalHeight);
+      this.renderer.setScissorTest(true);
+      this.renderer.clear(); // Clear canvas color & depth
 
       // Hide player model body during FPV render so camera isn't inside it
       if (this.playerMesh) this.playerMesh.visible = false;
 
       this.renderer.render(this.scene, this.fpCamera);
 
-      // --- Viewport 2: Orbit Overview View (Auxiliary PiP minimap) ---
+      // --- Viewport 2: Orbit Overview View (Right Screen) ---
       this.scene.fog = null; // Temporarily disable scene fog so 3D minimap renders crystal clear!
 
-      // Adjust viewport and scissor box using Device Pixel Ratio (DPR) to prevent blurriness
-      const dpr = this.renderer.getPixelRatio();
-      const pipWidth = 240 * dpr;
-      const pipHeight = 180 * dpr;
-      const pipX = (width - 240 - 20) * dpr;
-      const pipY = 20 * dpr;
-
-      this.renderer.setViewport(pipX, pipY, pipWidth, pipHeight);
-      this.renderer.setScissor(pipX, pipY, pipWidth, pipHeight);
+      this.renderer.setViewport(halfPhysicalWidth, 0, halfPhysicalWidth, physicalHeight);
+      this.renderer.setScissor(halfPhysicalWidth, 0, halfPhysicalWidth, physicalHeight);
       this.renderer.setScissorTest(true);
-      
-      this.renderer.clearDepth(); // Clear depth buffer so PiP draws correctly
+      this.renderer.clearDepth(); // Clear depth buffer so right side draws correctly on top
 
-      // Show player body in Orbit Overview PiP render
+      // Show player body in Orbit Overview render
       if (this.playerMesh) this.playerMesh.visible = true;
 
       this.renderer.render(this.scene, this.camera);

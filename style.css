@@ -327,8 +327,8 @@ button.primary:hover {
 /* HUD Compass Overlay */
 #compass-hud {
   position: absolute;
-  bottom: 215px; /* Floats above the PiP Minimap */
-  right: 20px;
+  bottom: 20px;
+  left: calc(50% + 20px); /* Floats at the bottom-left of the right-half screen */
   background: var(--panel-bg);
   border: 1px solid var(--panel-border);
   border-radius: 8px;
@@ -344,27 +344,20 @@ button.primary:hover {
 /* Floating Minimap / PiP Matrix Overlay */
 #pip-overlay {
   position: absolute;
-  bottom: 20px;
-  right: 20px;
-  width: 240px;
-  height: 180px;
-  border: 1.5px solid var(--neon-cyan);
-  border-radius: 10px;
-  background: rgba(5, 5, 12, 0.4);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  top: 0;
+  right: 0;
+  width: 50%;
+  height: 100%;
+  border-left: 2px solid var(--panel-border);
+  background: transparent;
   z-index: 15;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6),
-              0 0 10px rgba(0, 204, 255, 0.15);
   cursor: grab;
   overflow: hidden;
-  transition: border-color 0.3s, box-shadow 0.3s;
+  transition: border-color 0.3s;
 }
 
 #pip-overlay:hover {
-  border-color: #ffffff;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.7),
-              0 0 15px rgba(0, 204, 255, 0.3);
+  border-left-color: var(--neon-cyan);
 }
 
 #pip-overlay:active {
@@ -373,15 +366,15 @@ button.primary:hover {
 
 .pip-label {
   position: absolute;
-  top: 6px;
-  left: 10px;
+  top: 20px;
+  left: 20px;
   font-family: var(--font-hud);
-  font-size: 0.58rem;
+  font-size: 0.85rem;
   font-weight: 700;
   color: var(--neon-cyan);
-  letter-spacing: 0.5px;
+  letter-spacing: 1px;
   text-transform: uppercase;
-  text-shadow: 0 0 4px rgba(0, 204, 255, 0.5);
+  text-shadow: 0 0 8px rgba(0, 204, 255, 0.6);
   pointer-events: none;
 }
 
